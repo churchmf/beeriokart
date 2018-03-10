@@ -1,7 +1,5 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -51,30 +49,25 @@ namespace BeerioKartTournamentGenerator
             const int NumRounds = 4;
             TimeSpan MatchLength = TimeSpan.FromMinutes(7);
             TimeSpan BreakBetweenRounds = TimeSpan.FromMinutes(5);
-            DateTime StartTime = DateTime.Parse("2/25/2018 8:30 PM");
+            DateTime StartTime = DateTime.Parse("3/10/2018 8:30 PM");
             string[] PlayerNames =
             {
+                "Matt",
                 "Lane",
                 "Inga",
-                "Matt",
+                "Kat",
                 "Erin",
                 "Angela",
-                "Katie",
-                "Alex McCoid",
-                "Carlos",
-                "Lauren",
-                "Pat",
+                "Patrick",
+                "Paul",
                 "Jordan",
-                "Cam",
                 "Monique",
-                "Kim",
                 "Salish",
                 "Brian",
                 "Rayna",
                 "Daryl",
-                "AJ",
-                "Kevin",
-                "Ben",
+                "Carlos",
+                "Courtney"
             };
 
             var numPlayers = PlayerNames.Length;
@@ -112,8 +105,9 @@ namespace BeerioKartTournamentGenerator
                             matches.Add(match);
                         }
 
-                        var player = GetPlayerForMatch(unmatchedPlayers, match.Players, playerMatchups);
-                        if(player != null)
+                        // Get the best (most unique matchup) player from unmatched based on previous match ups
+                        var player = unmatchedPlayers.OrderBy(p => GetPlayerMatchUpSum(p, match.Players, playerMatchups)).First();
+                        if (player != null)
                         {
                             unmatchedPlayers.Remove(player);
                             match.Players.Add(player);
@@ -148,43 +142,21 @@ namespace BeerioKartTournamentGenerator
             File.WriteAllText("output.json", String.Join(Environment.NewLine, rounds));
         }
 
-        public static Player GetPlayerForMatch(List<Player> unmatchedPlayers, List<Player> matchPlayers, Dictionary<string, int> playerMatchups, int maxCount = 0)
+        public static int GetPlayerMatchUpSum(Player eligiblePlayer, List<Player> matchPlayers, Dictionary<string, int> playerMatchups)
         {
-            Player playerForMatch = null;
-            // shuffle un matched players to try and get better pairings
-            unmatchedPlayers = unmatchedPlayers.OrderBy(a => Guid.NewGuid()).ToList();
-            foreach (Player eligiblePlayer in unmatchedPlayers)
+            int sum = 0;
+            foreach(Player matchPlayer in matchPlayers)
             {
-                var eligible = true;
-                foreach (Player matchPlayer in matchPlayers)
+                int count = 0;
+                if (playerMatchups.TryGetValue(GetKey(eligiblePlayer, matchPlayer), out count))
                 {
-                    int count = 0;
-                    if(playerMatchups.TryGetValue(GetKey(eligiblePlayer, matchPlayer), out count))
-                    {
-                        if (count > maxCount)
-                        {
-                            eligible = false;
-                            break;
-                        }
-                    }
-                }
-
-                if(eligible)
-                {
-                    playerForMatch = eligiblePlayer;
-                    break;
+                    sum += count;
                 }
             }
-
-            if(playerForMatch == null && unmatchedPlayers.Count > 0)
-            {
-                // We didn't find a player, so ignore match history and shuffle list
-                playerForMatch = GetPlayerForMatch(unmatchedPlayers, matchPlayers, playerMatchups, playerMatchups.Max(m=>m.Value));
-            }
-
-            return playerForMatch;
+            return sum;
         }
 
+        // Hash of unique player matchings
         public static string GetKey(Player a, Player b)
         {
             var ordered = new int[] { a.Id, b.Id };
