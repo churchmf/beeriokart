@@ -2,120 +2,90 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
 
 namespace BeerioKartTournamentGenerator
 {
-    public class Player
-    {
-        public int Id { get; set; }
-
-        public string Name { get; set; }
-
-        public override string ToString()
-        {
-            return String.Format("{0}", Name);
-        }
-    }
-    
-    public class Round
-    {
-        public int Id { get; set; }
-        public List<Match> Matches { get; set; }
-
-        public override string ToString()
-        {
-            return String.Format("Round [{0}]\n[{1}]", (Id + 1).ToString(), String.Join(Environment.NewLine, Matches));
-        }
-    }
-
-    public class Match
-    {
-        public int Id { get; set; }
-        public List<Player> Players { get; set; }
-        public DateTime Time { get; set; }
-
-        public override string ToString()
-        {
-            return String.Format("Match [{0}] [{1}] [{2}]", (Id + 1).ToString(), Time.ToString("hh:mm tt"), String.Join(", ", Players));
-        }
-    }
-
     [HelpOption]
     public class Program
     {
         public static int Main(string[] args) => CommandLineApplication.Execute<Program>(args);
 
-        [Required]
         [Option(Description = "Maximum number of players per match", ShortName = "num-players")]
-        public int MaxNumPlayersPerMatch { get; }
+        public int MaxNumPlayersPerMatch { get; } = 4;
 
-        [Required]
-        [Option(Description = "Number of rounds each player will play", ShortName = "num-rounds")]
-        public int NumRounds { get; }
-
-        [Required]
         [Option(Description = "Estimated match length in minutes", ShortName = "match-length")]
-        public int MatchLength { get; }
+        public int MatchLength { get; } = 10;
 
-        [Required]
+        [Option(Description = "Number of rounds each player will play", ShortName = "num-rounds")]
+        public int NumRounds { get; } = 4;
+
         [Option(Description = "Estimated break between rounds in minutes", ShortName = "break-length")]
-        public int BreakBetweenRounds { get; }
+        public int BreakBetweenRounds { get; } = 5;
 
         [Option(Description = "Start date and time of first match", ShortName = "start")]
         public string Start { get; }
 
         [Option(Description = "List of players. Defaults to players in players.json if not provided", ShortName = "players")]
-        public string[] Players { get; set; }
+        public string[] PlayerNames { get; set; }
 
-        public const string PlayersFile = "players.json";
+        [Option(Description = "JSON file specifying player data", ShortName = "players-file")]
+        public string PlayersFile { get; set; } = "players.json";
 
-        private void OnExecute()
+        void OnExecute()
         {
-            if(!Players.Any() && File.Exists(PlayersFile))
-            {
-                Console.WriteLine("No Players provided, reading from players.json instead...");
-                Players = JsonConvert.DeserializeObject<string[]>(File.ReadAllText(PlayersFile));
-                Console.WriteLine("Found {0} players", Players.Length);
-            }
+            var players = new List<Player>();
+            var rounds = new List<Round>();
+            var playerMatchups = new Dictionary<string, int>();
 
             DateTime startTime;
-            if(!DateTime.TryParse(Start, out startTime) )
+            if(!DateTime.TryParse(Start, out startTime))
             {
-                Console.WriteLine("Defaulting to now. Unable to parse DateTime from " + Start);
+                Console.WriteLine("Defaulting to now. Unable to parse DateTime from command line");
                 startTime = DateTime.Now;
             }
 
-            var numPlayers = Players.Length;
-            var players = new List<Player>();
-            var rounds = new List<Round>();
-
-            var playerMatchups = new Dictionary<string, int>();
-
-            for (int playerIndex = 0; playerIndex < numPlayers; ++playerIndex) 
+            if(PlayerNames != null && PlayerNames.Any())
             {
-                players.Add(new Player() { Id = playerIndex, Name = Players[playerIndex] });
+                Console.WriteLine("Found {0} players", PlayerNames.Length);
+                for(int playerIndex = 0; playerIndex < PlayerNames.Length; ++playerIndex)
+                {
+                    players.Add(new Player() { Id = playerIndex, Name = PlayerNames[playerIndex] });
+                }
+            }
+            else
+            {
+                if(File.Exists(PlayersFile))
+                {
+                    Console.WriteLine("Reading from players-file...");
+                    players = JsonConvert.DeserializeObject<List<Player>>(File.ReadAllText(PlayersFile));
+                }
+                else
+                {
+                    throw new InvalidOperationException("No players provided. Please specify players or provide a valid players-file");
+                }
             }
 
-            for (int roundIndex = 0; roundIndex < NumRounds; ++roundIndex)
+            for(int roundIndex = 0; roundIndex < NumRounds; ++roundIndex)
             {
                 var matches = new List<Match>();
 
-                var numMatchPerRound = Math.Ceiling((double)numPlayers / (double) MaxNumPlayersPerMatch);
+                double numMatchPerRound = Math.Ceiling((double) players.Count / (double) MaxNumPlayersPerMatch);
+                DateTime roundStartTime = startTime.AddMinutes((MatchLength * numMatchPerRound * (roundIndex)) + BreakBetweenRounds);
+
                 var unmatchedPlayers = new List<Player>(players);
-
-                var roundStartTime = startTime.AddMinutes((MatchLength * numMatchPerRound * (roundIndex)) + BreakBetweenRounds);
-
-                while (unmatchedPlayers.Count > 0)
+                while(unmatchedPlayers.Count > 0)
                 {
-                    for (int matchIndex = 0; matchIndex < numMatchPerRound; ++matchIndex)
+                    for(int matchIndex = 0; matchIndex < numMatchPerRound; ++matchIndex)
                     {
-                        var match = matches.Where(ma => ma.Id == matchIndex).SingleOrDefault();
+                        Match match = matches
+                            .Where(ma => ma.Id == matchIndex)
+                            .SingleOrDefault();
                         if(match == null)
                         {
-                            match = new Match() {
+                            match = new Match()
+                            {
                                 Id = matchIndex,
                                 Players = new List<Player>(),
                                 Time = roundStartTime.AddMinutes(MatchLength * matchIndex)
@@ -124,8 +94,10 @@ namespace BeerioKartTournamentGenerator
                         }
 
                         // Get the best (most unique matchup) player from unmatched based on previous match ups
-                        var player = unmatchedPlayers.OrderBy(p => GetPlayerMatchUpSum(p, match.Players, playerMatchups)).First();
-                        if (player != null)
+                        Player player = unmatchedPlayers
+                            .OrderBy(p => GetPlayerMatchUpSum(p, match.Players, playerMatchups))
+                            .First();
+                        if(player != null)
                         {
                             unmatchedPlayers.Remove(player);
                             match.Players.Add(player);
@@ -138,11 +110,11 @@ namespace BeerioKartTournamentGenerator
                 {
                     for(int i = 0; i < match.Players.Count; ++i)
                     {
-                        for(int j = i+1; j < match.Players.Count; ++j)
+                        for(int j = i + 1; j < match.Players.Count; ++j)
                         {
-                            var matchup = GetKey(match.Players[i], match.Players[j]);
+                            string matchup = GetKey(match.Players[i], match.Players[j]);
                             int count;
-                            if (!playerMatchups.TryGetValue(matchup, out count))
+                            if(!playerMatchups.TryGetValue(matchup, out count))
                             {
                                 playerMatchups[matchup] = 0;
                             }
@@ -151,22 +123,32 @@ namespace BeerioKartTournamentGenerator
                     }
                 }
 
+                // Calculate fractional odds for players in each match
+                foreach(Match match in matches)
+                {
+                    match.FractionalOdds = new Dictionary<Player, float>();
+
+                    float sumPoints = match.Players.Sum(p => p.HistoricalAveragePoints);
+                    foreach(Player player in match.Players)
+                    {
+                        match.FractionalOdds.Add(player, ConvertProbabilityToFractionalOdds(player.HistoricalAveragePoints / sumPoints));
+                    }
+                }
+
                 rounds.Add(new Round() { Id = roundIndex, Matches = matches });
             }
-            var maxMatchups = playerMatchups.Max(m => m.Value);
-            var minMatchups = playerMatchups.Min(m => m.Value);
 
             Console.WriteLine(String.Join(Environment.NewLine, rounds));
-            File.WriteAllText("brackets.json", JsonConvert.SerializeObject(rounds));
+            File.WriteAllText("brackets.json", JsonConvert.SerializeObject(rounds, Formatting.Indented));
         }
 
-        public static int GetPlayerMatchUpSum(Player eligiblePlayer, List<Player> matchPlayers, Dictionary<string, int> playerMatchups)
+        int GetPlayerMatchUpSum(Player eligiblePlayer, List<Player> matchPlayers, Dictionary<string, int> playerMatchups)
         {
             int sum = 0;
             foreach(Player matchPlayer in matchPlayers)
             {
                 int count = 0;
-                if (playerMatchups.TryGetValue(GetKey(eligiblePlayer, matchPlayer), out count))
+                if(playerMatchups.TryGetValue(GetKey(eligiblePlayer, matchPlayer), out count))
                 {
                     sum += count;
                 }
@@ -175,10 +157,16 @@ namespace BeerioKartTournamentGenerator
         }
 
         // Hash of unique player matchings
-        public static string GetKey(Player a, Player b)
+        string GetKey(Player a, Player b)
         {
             var ordered = new int[] { a.Id, b.Id };
             return String.Join("-", ordered.OrderBy(i => i));
+        }
+
+        // Probability = Fractional odds denominator / (Fractional odds denominator + Fractional odds numerator)
+        float ConvertProbabilityToFractionalOdds(float probability)
+        {
+            return (1f - probability) / probability;
         }
     }
 }
