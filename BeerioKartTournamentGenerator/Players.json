@@ -59,6 +59,16 @@
     "Name": "Shaida",
     // Self reported below average
     "HistoricalAveragePoints": 7,
-    "DisplayFractionalOdds":  false
+    "DisplayFractionalOdds": false
+  },
+  {
+    "Id": 13,
+    "Name": "Kat",
+    "HistoricalAveragePoints": 8
+  },
+  {
+    "Id": 14,
+    "Name": "Brian",
+    "HistoricalAveragePoints": 7
   }
 ]

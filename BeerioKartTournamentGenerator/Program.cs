@@ -106,11 +106,11 @@ namespace BeerioKartTournamentGenerator
             File.WriteAllText("brackets.json", JsonConvert.SerializeObject(rounds, Formatting.Indented));
         }
 
-        Tuple<int, List<Player>> GetMostUniqueMatch(List<Player> options, int matchSize, Dictionary<string, int> playerMatchups)
+        List<Player> GetMostUniqueMatch(List<Player> options, int matchSize, Dictionary<string, int> playerMatchups)
         {
             if(playerMatchups.All(p => p.Value == 0))
             {
-                return Tuple.Create(0, options.Take(matchSize).ToList());
+                return options.Take(matchSize).ToList();
             }
 
             List<Player> mostUnique = null;
@@ -119,16 +119,16 @@ namespace BeerioKartTournamentGenerator
             int sumScore = 0;
 
             int numCombinations = 0;
-            foreach(Player[] combination in Combinations.CombinationsRosettaWoRecursion(options.ToArray(), MaxNumPlayersPerMatch))
+            foreach(Player[] combination in Combinations.CombinationsRosettaWoRecursion(options.ToArray(), matchSize))
             {
                 numCombinations++;
                 int score = CalculateUniquenessScore(combination.ToList(), playerMatchups);
-                if(score < minScore)
+                if(score <= minScore)
                 {
                     minScore = score;
                     mostUnique = combination.ToList();
                 }
-                if(score > maxScore)
+                if(score >= maxScore)
                 {
                     maxScore = score;
                 }
@@ -140,7 +140,7 @@ namespace BeerioKartTournamentGenerator
             Console.WriteLine("Min Score {0}", minScore);
             Console.WriteLine("Max Score {0}", maxScore);
             Console.WriteLine("Average Score {0}", (float) sumScore / numCombinations);
-            return Tuple.Create(minScore, mostUnique);
+            return mostUnique;
         }
 
         List<Match> GenerateMatches(List<Player> players, DateTime roundStartTime, Dictionary<string, int> playerMatchups)
@@ -151,13 +151,20 @@ namespace BeerioKartTournamentGenerator
             remainingPlayers.Shuffle();
             while(remainingPlayers.Count > 0)
             {
-                Tuple<int, List<Player>> bestPlayerMatchup = GetMostUniqueMatch(remainingPlayers, MaxNumPlayersPerMatch, playerMatchups);
-                foreach(Player player in bestPlayerMatchup.Item2)
+                // If we don't have even brackets, we need to split the remainder across other brackets
+                int numPlayersInBracket = MaxNumPlayersPerMatch;
+                if(remainingPlayers.Count % MaxNumPlayersPerMatch != 0)
+                {
+                    numPlayersInBracket = Math.Max(0, MaxNumPlayersPerMatch - 1);
+                }
+
+                List<Player> bestPlayerMatchup = GetMostUniqueMatch(remainingPlayers, numPlayersInBracket, playerMatchups);
+                foreach(Player player in bestPlayerMatchup)
                 {
                     remainingPlayers.Remove(player);
                 }
 
-                matches.Add(new Match() { Id = matches.Count, Players = bestPlayerMatchup.Item2, Time = roundStartTime.AddMinutes(MatchLength * matches.Count) });
+                matches.Add(new Match() { Id = matches.Count, Players = bestPlayerMatchup, Time = roundStartTime.AddMinutes(MatchLength * matches.Count) });
             }
 
             // Calculate fractional odds for players in each match
