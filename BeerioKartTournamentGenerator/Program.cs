@@ -67,45 +67,25 @@ namespace BeerioKartTournamentGenerator
                 }
             }
 
+            // Initialize matchup counts
+            for(int i = 0; i < players.Count; ++i)
+            {
+                for(int j = i + 1; j < players.Count; ++j)
+                {
+                    string key = GetKey(players[i], players[j]);
+                    playerMatchups.Add(key, 0);
+                }
+            }
+
             for(int roundIndex = 0; roundIndex < NumRounds; ++roundIndex)
             {
-                var matches = new List<Match>();
-
                 double numMatchPerRound = Math.Ceiling((double) players.Count / (double) MaxNumPlayersPerMatch);
                 DateTime roundStartTime = startTime.AddMinutes((MatchLength * numMatchPerRound * (roundIndex)) + BreakBetweenRounds);
 
-                var unmatchedPlayers = new List<Player>(players);
-                while(unmatchedPlayers.Count > 0)
-                {
-                    for(int matchIndex = 0; matchIndex < numMatchPerRound; ++matchIndex)
-                    {
-                        Match match = matches
-                            .Where(ma => ma.Id == matchIndex)
-                            .SingleOrDefault();
-                        if(match == null)
-                        {
-                            match = new Match()
-                            {
-                                Id = matchIndex,
-                                Players = new List<Player>(),
-                                Time = roundStartTime.AddMinutes(MatchLength * matchIndex)
-                            };
-                            matches.Add(match);
-                        }
+                Console.WriteLine("Generating matches for round {0}", roundIndex + 1);
+                List<Match> matches = GenerateMatches(players, roundStartTime, playerMatchups);
 
-                        // Get the best (most unique matchup) player from unmatched based on previous match ups
-                        Player player = unmatchedPlayers
-                            .OrderBy(p => GetPlayerMatchUpSum(p, match.Players, playerMatchups))
-                            .First();
-                        if(player != null)
-                        {
-                            unmatchedPlayers.Remove(player);
-                            match.Players.Add(player);
-                        }
-                    }
-                }
-
-                // update player matchups
+                // Update player matchups
                 foreach(Match match in matches)
                 {
                     for(int i = 0; i < match.Players.Count; ++i)
@@ -113,47 +93,121 @@ namespace BeerioKartTournamentGenerator
                         for(int j = i + 1; j < match.Players.Count; ++j)
                         {
                             string matchup = GetKey(match.Players[i], match.Players[j]);
-                            int count;
-                            if(!playerMatchups.TryGetValue(matchup, out count))
-                            {
-                                playerMatchups[matchup] = 0;
-                            }
                             playerMatchups[matchup]++;
                         }
-                    }
-                }
-
-                // Calculate fractional odds for players in each match
-                foreach(Match match in matches)
-                {
-                    match.FractionalOdds = new Dictionary<Player, float>();
-
-                    float sumPoints = match.Players.Sum(p => p.HistoricalAveragePoints);
-                    foreach(Player player in match.Players)
-                    {
-                        match.FractionalOdds.Add(player, ConvertProbabilityToFractionalOdds(player.HistoricalAveragePoints / sumPoints));
                     }
                 }
 
                 rounds.Add(new Round() { Id = roundIndex, Matches = matches });
             }
 
-            Console.WriteLine(String.Join(Environment.NewLine, rounds));
+            string value = String.Join(Environment.NewLine, rounds);
+            Console.WriteLine(value);
             File.WriteAllText("brackets.json", JsonConvert.SerializeObject(rounds, Formatting.Indented));
         }
 
-        int GetPlayerMatchUpSum(Player eligiblePlayer, List<Player> matchPlayers, Dictionary<string, int> playerMatchups)
+        Tuple<int, List<Player>> GetMostUniqueMatch(List<Player> options, int matchSize, Dictionary<string, int> playerMatchups)
         {
-            int sum = 0;
-            foreach(Player matchPlayer in matchPlayers)
+            if(playerMatchups.All(p => p.Value == 0))
             {
-                int count = 0;
-                if(playerMatchups.TryGetValue(GetKey(eligiblePlayer, matchPlayer), out count))
+                return Tuple.Create(0, options.Take(matchSize).ToList());
+            }
+
+            List<Player> mostUnique = null;
+            int minScore = Int32.MaxValue;
+            int maxScore = Int32.MinValue;
+            int sumScore = 0;
+
+            int numCombinations = 0;
+            foreach(Player[] combination in Combinations.CombinationsRosettaWoRecursion(options.ToArray(), MaxNumPlayersPerMatch))
+            {
+                numCombinations++;
+                int score = CalculateUniquenessScore(combination.ToList(), playerMatchups);
+                if(score < minScore)
                 {
+                    minScore = score;
+                    mostUnique = combination.ToList();
+                }
+                if(score > maxScore)
+                {
+                    maxScore = score;
+                }
+                sumScore += score;
+            }
+
+            Console.WriteLine("Checked {0} combinations", numCombinations);
+            Console.WriteLine("Most Unique {0}", String.Join(", ", mostUnique));
+            Console.WriteLine("Min Score {0}", minScore);
+            Console.WriteLine("Max Score {0}", maxScore);
+            Console.WriteLine("Average Score {0}", (float) sumScore / numCombinations);
+            return Tuple.Create(minScore, mostUnique);
+        }
+
+        List<Match> GenerateMatches(List<Player> players, DateTime roundStartTime, Dictionary<string, int> playerMatchups)
+        {
+            var matches = new List<Match>();
+
+            var remainingPlayers = new List<Player>(players);
+            remainingPlayers.Shuffle();
+            while(remainingPlayers.Count > 0)
+            {
+                Tuple<int, List<Player>> bestPlayerMatchup = GetMostUniqueMatch(remainingPlayers, MaxNumPlayersPerMatch, playerMatchups);
+                foreach(Player player in bestPlayerMatchup.Item2)
+                {
+                    remainingPlayers.Remove(player);
+                }
+
+                matches.Add(new Match() { Id = matches.Count, Players = bestPlayerMatchup.Item2, Time = roundStartTime.AddMinutes(MatchLength * matches.Count) });
+            }
+
+            // Calculate fractional odds for players in each match
+            foreach(Match match in matches)
+            {
+                match.FractionalOdds = new Dictionary<Player, float>();
+
+                float sumPoints = match.Players.Sum(p => p.HistoricalAveragePoints.GetValueOrDefault());
+                if(sumPoints > 0f)
+                {
+                    foreach(Player player in match.Players.Where(p => p.DisplayFractionalOdds))
+                    {
+                        match.FractionalOdds.Add(player, ConvertProbabilityToFractionalOdds(player.HistoricalAveragePoints.GetValueOrDefault() / sumPoints));
+                    }
+                }
+            }
+
+            return matches;
+        }
+
+        int CalculateUniquenessScore(List<Player> players, Dictionary<string, int> playerMatchups)
+        {
+            int max = Int32.MinValue;
+            int min = Int32.MaxValue;
+            int sum = 0;
+            for(int i = 0; i < players.Count; ++i)
+            {
+                for(int j = i + 1; j < players.Count; ++j)
+                {
+                    Player a = players[i];
+                    Player b = players[j];
+                    int count = 0;
+
+                    string key = GetKey(a, b);
+                    playerMatchups.TryGetValue(key, out count);
+
+                    if(count > max)
+                    {
+                        max = count;
+                    }
+
+                    if(count < min)
+                    {
+                        min = count;
+                    }
+
                     sum += count;
                 }
             }
-            return sum;
+            return sum + (max + min * 2);
         }
 
         // Hash of unique player matchings
