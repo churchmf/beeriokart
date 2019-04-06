@@ -1,0 +1,78 @@
+﻿[
+  {
+    "PlayerId": 1,
+    "Name": "Matt",
+    "HistoricalAveragePoints": 12.5,
+    "Info": {
+      "HairColour": "Brown",
+      "EyeColour": "Brown"
+    }
+  },
+  {
+    "PlayerId": 2,
+    "Name": "Monique",
+    "HistoricalAveragePoints": 14
+  },
+  {
+    "PlayerId": 3,
+    "Name": "Lane",
+    "HistoricalAveragePoints": 8
+  },
+  {
+    "PlayerId": 4,
+    "Name": "Inga",
+    "HistoricalAveragePoints": 10
+  },
+  {
+    "PlayerId": 5,
+    "Name": "AJ",
+    "HistoricalAveragePoints": 8.5
+  },
+  {
+    "PlayerId": 6,
+    "Name": "Carlos",
+    "HistoricalAveragePoints": 11.5
+  },
+  {
+    "PlayerId": 7,
+    "Name": "Salish",
+    "HistoricalAveragePoints": 12
+  },
+  {
+    "PlayerId": 8,
+    "Name": "Daryl",
+    "HistoricalAveragePoints": 14
+  },
+  {
+    "PlayerId": 9,
+    "Name": "Angela",
+    "HistoricalAveragePoints": 7
+  },
+  {
+    "PlayerId": 10,
+    "Name": "Paul",
+    "HistoricalAveragePoints": 9
+  },
+  {
+    "PlayerId": 11,
+    "Name": "Kevin",
+    "HistoricalAveragePoints": 13
+  },
+  {
+    "PlayerId": 12,
+    "Name": "Shaida",
+    // Self reported below average
+    "HistoricalAveragePoints": 7,
+    "DisplayFractionalOdds": false
+  },
+  {
+    "PlayerId": 13,
+    "Name": "Kat",
+    "HistoricalAveragePoints": 8
+  },
+  {
+    "PlayerId": 14,
+    "Name": "Brian",
+    "HistoricalAveragePoints": 7
+  }
+]
