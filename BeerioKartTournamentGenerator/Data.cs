@@ -43,19 +43,27 @@ namespace BeerioKartTournamentGenerator
 
         public override string ToString()
         {
-            KeyValuePair<Player, float> underdog = FractionalOdds.Aggregate((x, y) => x.Value > y.Value ? x : y);
-            KeyValuePair<Player, float> favored = FractionalOdds.Aggregate((x, y) => x.Value < y.Value ? x : y);
-            return String.Format("Match [{0}] [{1}] [{2}] [{3}]",
+            string odds = String.Empty;
+            if(FractionalOdds != null)
+            {
+                KeyValuePair<Player, float> underdog = FractionalOdds.Aggregate((x, y) => x.Value > y.Value ? x : y);
+                KeyValuePair<Player, float> favored = FractionalOdds.Aggregate((x, y) => x.Value < y.Value ? x : y);
+                odds = String.Format("[{0}]",
+                        String.Join(", ", FractionalOdds
+                        .Select(kvp => String.Format("{0} {2} {1}",
+                            kvp.Key.Name,
+                            Fraction.ParseFromReal(kvp.Value),
+                            kvp.Key == favored.Key ? "(favoured)" : kvp.Key == underdog.Key ? "(underdog)" : String.Empty)
+                        )
+                    )
+                );
+            }
+
+            return String.Format("Match [{0}] [{1}] [{2}] {3}",
                 (Id + 1).ToString(),
                 Time.ToString("hh:mm tt"),
                 String.Join(", ", Players),
-                String.Join(", ", FractionalOdds
-                    .Select(kvp => String.Format("{0} {2} {1}",
-                        kvp.Key.Name,
-                        Fraction.ParseFromReal(kvp.Value),
-                        kvp.Key == favored.Key ? "(favoured)" : kvp.Key == underdog.Key ? "(underdog)" : String.Empty)
-                    )
-                )
+                odds
             );
         }
     }

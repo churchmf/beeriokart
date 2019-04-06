@@ -1,5 +1,6 @@
-﻿using McMaster.Extensions.CommandLineUtils;
+﻿using NDesk.Options;
 using Newtonsoft.Json;
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -7,64 +8,139 @@ using System.Linq;
 
 namespace BeerioKartTournamentGenerator
 {
-    [HelpOption]
     public class Program
     {
-        public static int Main(string[] args) => CommandLineApplication.Execute<Program>(args);
+        static Logger s_logger = LogManager.GetCurrentClassLogger();
 
-        [Option(Description = "Maximum number of players per match", ShortName = "num-players")]
-        public int MaxNumPlayersPerMatch { get; } = 4;
+        int _maxNumPlayersPerMatch = 4;
+        int _matchLength = 10;
+        int _numRounds = 4;
+        int _breakBetweenRounds = 5;
+        DateTime _start = DateTime.Now;
+        string _playersFile = "players.json";
+        string _bracketsFile = "brackets.json";
+        bool _calculateOdds = false;
+        LogLevel _minConsoleLogLevel = LogLevel.Info;
 
-        [Option(Description = "Estimated match length in minutes", ShortName = "match-length")]
-        public int MatchLength { get; } = 10;
+        public static int Main(string[] args)
+        {
+            var program = new Program();
+            program.ParseOptions(args);
 
-        [Option(Description = "Number of rounds each player will play", ShortName = "num-rounds")]
-        public int NumRounds { get; } = 4;
+            try
+            {
+                program.Execute();
+            }
+            catch(Exception e)
+            {
+                s_logger.Error(e);
+                return 1;
+            }
 
-        [Option(Description = "Estimated break between rounds in minutes", ShortName = "break-length")]
-        public int BreakBetweenRounds { get; } = 5;
+            return 0;
+        }
 
-        [Option(Description = "Start date and time of first match", ShortName = "start")]
-        public string Start { get; }
+        void ParseOptions(string[] args)
+        {
+            bool showHelp = false;
 
-        [Option(Description = "List of players. Defaults to players in players.json if not provided", ShortName = "players")]
-        public string[] PlayerNames { get; set; }
+            var options = new OptionSet() {
+                {
+                        "n|num-players",
+                        "Maximum number of players per match",
+                        (int v) => _maxNumPlayersPerMatch = v
+                },
+                {
+                        "l|match-length",
+                        "Expected match length in minutes",
+                        (int v) => _matchLength = v
+                },
+                {
+                        "r|num-rounds",
+                        "Number of rounds each player will play",
+                        (int v) => _numRounds = v
+                },
+                {
+                        "b|break-length",
+                        "Estimated break between rounds in minutes",
+                        (int v) => _breakBetweenRounds = v
+                },
+                {
+                        "s|start",
+                        "Start date time of first match",
+                        v => _start = DateTime.Parse(v)
+                },
+                {
+                        "p|players",
+                        "Path to players JSON file",
+                        v => _playersFile = v
+                },
+                {
+                        "o|output",
+                        "Path for brackets JSON output file",
+                        v => _bracketsFile = v
+                },
+                {
+                        "c|calculate-odds",
+                        "Calculate bracket fractional odds",
+                        v => { if(v != null) _calculateOdds = true; }
+                },
+                {
+                        "v",
+                        "increase console message verbosity",
+                        v => { if (v != null)  _minConsoleLogLevel = LogLevel.Debug; }
+                },
+                {
+                        "h|help",
+                        "Information about using this application",
+                        v => showHelp = v != null
+                },
+            };
 
-        [Option(Description = "JSON file specifying player data", ShortName = "players-file")]
-        public string PlayersFile { get; set; } = "players.json";
+            try
+            {
+                options.Parse(args);
+            }
+            catch(OptionException e)
+            {
+                Console.WriteLine(e.Message);
+                showHelp = true;
+            }
 
-        void OnExecute()
+            if(showHelp)
+            {
+                options.WriteOptionDescriptions(Console.Out);
+            }
+
+            ConfigureLogging();
+        }
+
+        void ConfigureLogging()
+        {
+            var config = new NLog.Config.LoggingConfiguration();
+            var logfile = new NLog.Targets.FileTarget("logfile")
+            {
+                FileName = String.Format("{0}.log", AppDomain.CurrentDomain.FriendlyName)
+            };
+            var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
+            config.AddRule(_minConsoleLogLevel, LogLevel.Fatal, logconsole);
+            config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
+            LogManager.Configuration = config;
+        }
+
+        void Execute()
         {
             var players = new List<Player>();
             var rounds = new List<Round>();
             var playerMatchups = new Dictionary<string, int>();
 
-            DateTime startTime;
-            if(!DateTime.TryParse(Start, out startTime))
+            if(File.Exists(_playersFile))
             {
-                Console.WriteLine("Defaulting to now. Unable to parse DateTime from command line");
-                startTime = DateTime.Now;
-            }
-
-            if(PlayerNames != null && PlayerNames.Any())
-            {
-                Console.WriteLine("Found {0} players", PlayerNames.Length);
-                for(int playerIndex = 0; playerIndex < PlayerNames.Length; ++playerIndex)
-                {
-                    players.Add(new Player() { Id = playerIndex, Name = PlayerNames[playerIndex] });
-                }
+                players = JsonConvert.DeserializeObject<List<Player>>(File.ReadAllText(_playersFile));
             }
             else
             {
-                if(File.Exists(PlayersFile))
-                {
-                    Console.WriteLine("Reading from players-file...");
-                    players = JsonConvert.DeserializeObject<List<Player>>(File.ReadAllText(PlayersFile));
-                }
-                else
-                {
-                    throw new InvalidOperationException("No players provided. Please specify players or provide a valid players-file");
-                }
+                throw new InvalidOperationException("No players provided. Please specify players or provide a valid players-file");
             }
 
             // Initialize matchup counts
@@ -77,12 +153,12 @@ namespace BeerioKartTournamentGenerator
                 }
             }
 
-            for(int roundIndex = 0; roundIndex < NumRounds; ++roundIndex)
+            for(int roundIndex = 0; roundIndex < _numRounds; ++roundIndex)
             {
-                double numMatchPerRound = Math.Ceiling((double) players.Count / (double) MaxNumPlayersPerMatch);
-                DateTime roundStartTime = startTime.AddMinutes((MatchLength * numMatchPerRound * (roundIndex)) + BreakBetweenRounds);
+                double numMatchPerRound = Math.Ceiling((double) players.Count / (double) _maxNumPlayersPerMatch);
+                DateTime roundStartTime = _start.AddMinutes((_matchLength * numMatchPerRound * (roundIndex)) + _breakBetweenRounds);
 
-                Console.WriteLine("Generating matches for round {0}", roundIndex + 1);
+                s_logger.Debug("Generating matches for round {0}", roundIndex + 1);
                 List<Match> matches = GenerateMatches(players, roundStartTime, playerMatchups);
 
                 // Update player matchups
@@ -101,9 +177,13 @@ namespace BeerioKartTournamentGenerator
                 rounds.Add(new Round() { Id = roundIndex, Matches = matches });
             }
 
-            string value = String.Join(Environment.NewLine, rounds);
-            Console.WriteLine(value);
-            File.WriteAllText("brackets.json", JsonConvert.SerializeObject(rounds, Formatting.Indented));
+            s_logger.Info(String.Join(Environment.NewLine, rounds));
+            File.WriteAllText(_bracketsFile, JsonConvert.SerializeObject(
+                rounds,
+                Formatting.Indented,
+                new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }
+                )
+            );
         }
 
         List<Player> GetMostUniqueMatch(List<Player> options, int matchSize, Dictionary<string, int> playerMatchups)
@@ -135,11 +215,11 @@ namespace BeerioKartTournamentGenerator
                 sumScore += score;
             }
 
-            Console.WriteLine("Checked {0} combinations", numCombinations);
-            Console.WriteLine("Most Unique {0}", String.Join(", ", mostUnique));
-            Console.WriteLine("Min Score {0}", minScore);
-            Console.WriteLine("Max Score {0}", maxScore);
-            Console.WriteLine("Average Score {0}", (float) sumScore / numCombinations);
+            s_logger.Debug("Checked {0} combinations", numCombinations);
+            s_logger.Debug("Min Score {0}", minScore);
+            s_logger.Debug("Max Score {0}", maxScore);
+            s_logger.Debug("Average Score {0}", (float) sumScore / numCombinations);
+            s_logger.Debug("Most Unique {0}", String.Join(", ", mostUnique));
             return mostUnique;
         }
 
@@ -152,10 +232,10 @@ namespace BeerioKartTournamentGenerator
             while(remainingPlayers.Count > 0)
             {
                 // If we don't have even brackets, we need to split the remainder across other brackets
-                int numPlayersInBracket = MaxNumPlayersPerMatch;
-                if(remainingPlayers.Count % MaxNumPlayersPerMatch != 0)
+                int numPlayersInBracket = _maxNumPlayersPerMatch;
+                if(remainingPlayers.Count % _maxNumPlayersPerMatch != 0)
                 {
-                    numPlayersInBracket = Math.Max(0, MaxNumPlayersPerMatch - 1);
+                    numPlayersInBracket = Math.Max(0, _maxNumPlayersPerMatch - 1);
                 }
 
                 List<Player> bestPlayerMatchup = GetMostUniqueMatch(remainingPlayers, numPlayersInBracket, playerMatchups);
@@ -164,20 +244,23 @@ namespace BeerioKartTournamentGenerator
                     remainingPlayers.Remove(player);
                 }
 
-                matches.Add(new Match() { Id = matches.Count, Players = bestPlayerMatchup, Time = roundStartTime.AddMinutes(MatchLength * matches.Count) });
+                matches.Add(new Match() { Id = matches.Count, Players = bestPlayerMatchup, Time = roundStartTime.AddMinutes(_matchLength * matches.Count) });
             }
 
             // Calculate fractional odds for players in each match
-            foreach(Match match in matches)
+            if(_calculateOdds)
             {
-                match.FractionalOdds = new Dictionary<Player, float>();
-
-                float sumPoints = match.Players.Sum(p => p.HistoricalAveragePoints.GetValueOrDefault());
-                if(sumPoints > 0f)
+                foreach(Match match in matches)
                 {
-                    foreach(Player player in match.Players.Where(p => p.DisplayFractionalOdds))
+                    match.FractionalOdds = new Dictionary<Player, float>();
+
+                    float sumPoints = match.Players.Sum(p => p.HistoricalAveragePoints.GetValueOrDefault());
+                    if(sumPoints > 0f)
                     {
-                        match.FractionalOdds.Add(player, ConvertProbabilityToFractionalOdds(player.HistoricalAveragePoints.GetValueOrDefault() / sumPoints));
+                        foreach(Player player in match.Players.Where(p => p.DisplayFractionalOdds))
+                        {
+                            match.FractionalOdds.Add(player, ConvertProbabilityToFractionalOdds(player.HistoricalAveragePoints.GetValueOrDefault() / sumPoints));
+                        }
                     }
                 }
             }
