@@ -104,12 +104,14 @@ namespace BeerioKartTournamentGenerator
             catch(OptionException e)
             {
                 Console.WriteLine(e.Message);
-                showHelp = true;
+                options.WriteOptionDescriptions(Console.Out);
+                Environment.Exit(1);
             }
 
             if(showHelp)
             {
                 options.WriteOptionDescriptions(Console.Out);
+                Environment.Exit(0);
             }
 
             ConfigureLogging();
