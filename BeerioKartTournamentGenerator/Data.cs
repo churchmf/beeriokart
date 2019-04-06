@@ -8,7 +8,7 @@ namespace BeerioKartTournamentGenerator
     [Serializable]
     public class Player
     {
-        public int Id { get; set; }
+        public int PlayerId { get; set; }
 
         public string Name { get; set; }
 
@@ -17,6 +17,8 @@ namespace BeerioKartTournamentGenerator
 
         [JsonIgnore]
         public bool DisplayFractionalOdds { get; set; } = true;
+
+        public Dictionary<string, object> Info { get; set; } = new Dictionary<string, object>();
 
         public override string ToString()
         {
@@ -27,20 +29,20 @@ namespace BeerioKartTournamentGenerator
     [Serializable]
     public class Round
     {
-        public int Id { get; set; }
+        public int RoundId { get; set; }
 
         public List<Match> Matches { get; set; }
 
         public override string ToString()
         {
-            return String.Format("Round [{0}]\n[{1}]", (Id + 1).ToString(), String.Join(Environment.NewLine, Matches));
+            return String.Format("Round [{0}]\n[{1}]", (RoundId + 1).ToString(), String.Join(Environment.NewLine, Matches));
         }
     }
 
     [Serializable]
     public class Match
     {
-        public int Id { get; set; }
+        public int MatchId { get; set; }
 
         public List<Player> Players { get; set; }
 
@@ -67,7 +69,7 @@ namespace BeerioKartTournamentGenerator
             }
 
             return String.Format("Match [{0}] [{1}] [{2}] {3}",
-                (Id + 1).ToString(),
+                (MatchId + 1).ToString(),
                 Time.ToString("hh:mm tt"),
                 String.Join(", ", Players),
                 odds

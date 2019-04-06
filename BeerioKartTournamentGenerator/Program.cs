@@ -174,7 +174,7 @@ namespace BeerioKartTournamentGenerator
                     }
                 }
 
-                rounds.Add(new Round() { Id = roundIndex, Matches = matches });
+                rounds.Add(new Round() { RoundId = roundIndex, Matches = matches });
             }
 
             s_logger.Info(String.Join(Environment.NewLine, rounds));
@@ -244,7 +244,7 @@ namespace BeerioKartTournamentGenerator
                     remainingPlayers.Remove(player);
                 }
 
-                matches.Add(new Match() { Id = matches.Count, Players = bestPlayerMatchup, Time = roundStartTime.AddMinutes(_matchLength * matches.Count) });
+                matches.Add(new Match() { MatchId = matches.Count, Players = bestPlayerMatchup, Time = roundStartTime.AddMinutes(_matchLength * matches.Count) });
             }
 
             // Calculate fractional odds for players in each match
@@ -303,7 +303,7 @@ namespace BeerioKartTournamentGenerator
         // Hash of unique player matchings
         string GetKey(Player a, Player b)
         {
-            var ordered = new int[] { a.Id, b.Id };
+            var ordered = new int[] { a.PlayerId, b.PlayerId };
             return String.Join("-", ordered.OrderBy(i => i));
         }
 
