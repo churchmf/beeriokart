@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -11,8 +12,10 @@ namespace BeerioKartTournamentGenerator
 
         public string Name { get; set; }
 
+        [JsonIgnore]
         public float? HistoricalAveragePoints { get; set; }
 
+        [JsonIgnore]
         public bool DisplayFractionalOdds { get; set; } = true;
 
         public override string ToString()
@@ -25,6 +28,7 @@ namespace BeerioKartTournamentGenerator
     public class Round
     {
         public int Id { get; set; }
+
         public List<Match> Matches { get; set; }
 
         public override string ToString()
@@ -37,8 +41,11 @@ namespace BeerioKartTournamentGenerator
     public class Match
     {
         public int Id { get; set; }
+
         public List<Player> Players { get; set; }
+
         public Dictionary<Player, float> FractionalOdds { get; set; }
+
         public DateTime Time { get; set; }
 
         public override string ToString()

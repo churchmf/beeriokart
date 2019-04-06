@@ -72,7 +72,7 @@ namespace BeerioKartTournamentGenerator
                 },
                 {
                         "p|players",
-                        "Path to players JSON file",
+                        "Path to players JSON file. Players must have unique ids",
                         v => _playersFile = v
                 },
                 {
@@ -82,7 +82,7 @@ namespace BeerioKartTournamentGenerator
                 },
                 {
                         "c|calculate-odds",
-                        "Calculate bracket fractional odds",
+                        "Calculate bracket fractional odds based on historical average points for each player",
                         v => { if(v != null) _calculateOdds = true; }
                 },
                 {
